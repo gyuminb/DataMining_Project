@@ -70,10 +70,14 @@ def get_wallet_portfolio(address):
         price = cols[3].text.strip()
         amount = cols[4].text.strip()
         value = cols[5].text.strip()
+        # 컨트랙트 주소가 있는 경우 추출
+        contract_link = cols[1].find('a')
+        contract_address = contract_link.get('href').split('/')[-1].split('?')[0] if contract_link else None
         portfolio_data.append({
             "Address": address,
             "Chain": chain,
             "Token": token,
+            "Contract Address": contract_address,
             "Portfolio %": portfolio_percent,
             "Price": price,
             "Amount": amount,
