@@ -3,15 +3,41 @@ import shutil
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, collect_list, concat_ws, posexplode, count, array_distinct
 
-def create_spark_session(app_name="Etherscan Data Processing"):
-    return SparkSession.builder.appName(app_name).getOrCreate()
-
-def load_and_filter_data(spark, input_file):
+def load_data(spark, input_file):
     df = spark.read.csv(input_file, header=True, inferSchema=True)
-    return df.filter(col("Name Tag").isNull())
+    return df
 
-def create_item_column(df):
-    return df.withColumn("Item", concat_ws("_", col("Chain"), col("Token"), col("Contract Address")))
+def save_dataframe_as_single_csv(df, output_file, temp_dir):
+    df.coalesce(1).write.csv(temp_dir, header=True, mode="overwrite")
+    temp_file = [f for f in os.listdir(temp_dir) if f.startswith("part-")][0]
+    shutil.move(os.path.join(temp_dir, temp_file), output_file)
+    shutil.rmtree(temp_dir)
+    
+def preprocess_initial_data(spark, input_file, output_file, temp_dir="preprocessed_temp"):
+    # 데이터 로드
+    df = load_data(spark, input_file)
+    
+    # Name Tag가 없는 지갑 필터링
+    df_filtered = df.filter(col("Name Tag").isNull())
+    
+    # (Chain, Token, Contract Address) 아이템 생성
+    df_with_items = df_filtered.withColumn("Item", concat_ws("_", col("Chain"), col("Token"), col("Contract Address")))
+    
+    # 'ETH_Ether (ETH)' 제거 (Chain이 ETH, Token이 Ether (ETH), Contract Address가 NULL인 경우)
+    df_preprocessed = df_with_items.filter(~(
+        (col("Chain") == "ETH") & 
+        (col("Token") == "Ether (ETH)") & 
+        (col("Contract Address").isNull())
+    ))
+    
+    # Preprocessed 데이터셋 저장
+    save_dataframe_as_single_csv(df_preprocessed, output_file, temp_dir)
+    
+    # 최종 전처리된 지갑 주소 개수 출력
+    num_wallets = df_preprocessed.select("Address").distinct().count()
+    print(f"Final preprocessed data's Number of wallets (without Name Tag and Ether): {num_wallets}")
+    print(f"Preprocessed data saved to {output_file}.\n")
+    
 
 def group_items_by_address(df):
     return df.groupBy("Address").agg(collect_list("Item").alias("Items"))
@@ -27,34 +53,40 @@ def find_duplicate_items(df):
 def remove_duplicates_in_buckets(df):
     return df.withColumn("Items", array_distinct("Items"))
 
-def save_dataframe_as_single_csv(df, output_file, temp_dir):
-    df.coalesce(1).write.csv(temp_dir, header=True, mode="overwrite")
-    temp_file = [f for f in os.listdir(temp_dir) if f.startswith("part-")][0]
-    shutil.move(os.path.join(temp_dir, temp_file), output_file)
-    shutil.rmtree(temp_dir)
 
-if __name__ == "__main__":
-    # Step 1: Initialize Spark session
-    spark = create_spark_session()
-
-    # Step 2: Load data and filter for individual wallets only
-    input_file = "etherscan_merged_data.csv"
-    df_filtered = load_and_filter_data(spark, input_file)
-
-    # Step 3: Create (Chain, Token, Contract Address) item representation
-    df_items = create_item_column(df_filtered)
-
-    # Step 4: Group items by wallet address
-    df_buckets = group_items_by_address(df_items)
-
-    # Step 5: Identify and save duplicate items
+def process_bucket_itemsets(spark, input_file):
+    # 데이터 로드
+    df = load_data(spark, input_file)
+    
+    # 지갑 주소별 아이템 그룹화
+    df_buckets = group_items_by_address(df)
+    
+    # 중복된 아이템 찾기
     df_duplicates = find_duplicate_items(df_buckets)
     save_dataframe_as_single_csv(df_duplicates, "duplicate_items.csv", "duplicates_temp")
-
-    # Step 6: Remove duplicates from each bucket and save
+    print(f"Duplicate items saved to 'duplicate_items.csv'.")
+    
+    # 중복을 제거한 Bucket-Itemset 생성 및 저장
     df_buckets_deduped = remove_duplicates_in_buckets(df_buckets)
     df_buckets_deduped = df_buckets_deduped.withColumn("Items", concat_ws(",", "Items"))
     save_dataframe_as_single_csv(df_buckets_deduped, "unique_bucket_itemsets.csv", "unique_buckets_temp")
+    
+    # 중복 제거된 지갑 주소 수 출력
+    unique_wallet_count = df_buckets_deduped.select("Address").distinct().count()
+    print(f"Unique bucket itemsets saved to 'unique_bucket_itemsets.csv'.")
+    print(f"Total number of unique wallets: {unique_wallet_count}")
 
-    # Step 7: Stop Spark session
+if __name__ == "__main__":
+    # Step 1: SparkSession 생성
+    spark = SparkSession.builder.appName("Etherscan Data Processing").getOrCreate()
+
+    # Step 2: 초기 공통 전처리 수행
+    raw_input_file = "etherscan_merged_data.csv"
+    preprocessed_file = "preprocessed_data.csv"
+    preprocess_initial_data(spark, raw_input_file, preprocessed_file)
+
+    # Step 3: 전처리된 데이터 기반으로 Bucket-Itemset 처리
+    process_bucket_itemsets(spark, preprocessed_file)
+
+    # Step 4: SparkSession 종료
     spark.stop()
