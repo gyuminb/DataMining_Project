@@ -2,6 +2,7 @@ from pyspark.sql import SparkSession
 import pandas as pd
 import itertools
 from collections import defaultdict
+import os
 
 class SONAlgorithm:
     def __init__(self, itemsCol, minSupport, minConfidence):
@@ -191,16 +192,25 @@ class SONAlgorithm:
         spark.stop()
     
 if __name__ == "__main__":
-    input_csv = "unique_bucket_itemsets.csv"
+    # 파일 경로 설정
+    data_folder = "data"
+    input_csv = os.path.join(data_folder, "unique_bucket_itemsets.csv")
+    frequent_itemsets_output_csv = os.path.join(data_folder, "frequent_itemsets_son.csv")
+    association_rules_output_csv = os.path.join(data_folder, "association_rules_son.csv")
+    
+    # support, confidence 설정
     min_support = 0.05
     min_confidence = 0.6
 
+    # 데이터 로드
     df = pd.read_csv(input_csv)
     df['Items'] = df['Items'].apply(lambda x: x.split(","))
 
+    # apriori spark 기반 SON Algorithm 실행
     son_algo = SONAlgorithm(itemsCol="Items", minSupport=min_support, minConfidence=min_confidence)
     son_algo.fit(df)
 
+    # 결과 출력 및 저장
     print("Frequent Itemsets (sorted by freq):")
     sorted_frequent_itemsets = son_algo.frequent_itemsets.sort_values(by="freq", ascending=False)
     print(sorted_frequent_itemsets)
@@ -209,5 +219,7 @@ if __name__ == "__main__":
     sorted_association_rules = son_algo.association_rules.sort_values(by="confidence", ascending=False)
     print(sorted_association_rules)
 
-    sorted_frequent_itemsets.to_csv("frequent_itemsets_son.csv", index=False)
-    sorted_association_rules.to_csv("association_rules_son.csv", index=False)
+    sorted_frequent_itemsets.to_csv(frequent_itemsets_output_csv, index=False)
+    sorted_association_rules.to_csv(association_rules_output_csv, index=False)
+    print(f"Frequent itemsets saved to {frequent_itemsets_output_csv}")
+    print(f"Association rules saved to {association_rules_output_csv}")

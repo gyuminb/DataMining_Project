@@ -3,6 +3,11 @@ import shutil
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, collect_list, concat_ws, posexplode, count, array_distinct
 
+def ensure_data_folder(folder="data"):
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+        print(f"Created folder: {folder}")
+
 def load_data(spark, input_file):
     df = spark.read.csv(input_file, header=True, inferSchema=True)
     return df
@@ -15,6 +20,7 @@ def save_dataframe_as_single_csv(df, output_file, temp_dir):
     
 def preprocess_initial_data(spark, input_file, output_file, temp_dir="preprocessed_temp"):
     # 데이터 로드
+    ensure_data_folder()
     df = load_data(spark, input_file)
     
     # Name Tag가 없는 지갑 필터링
@@ -31,12 +37,13 @@ def preprocess_initial_data(spark, input_file, output_file, temp_dir="preprocess
     ))
     
     # Preprocessed 데이터셋 저장
-    save_dataframe_as_single_csv(df_preprocessed, output_file, temp_dir)
+    output_path = os.path.join("data", output_file)
+    save_dataframe_as_single_csv(df_preprocessed, output_path, temp_dir)
     
     # 최종 전처리된 지갑 주소 개수 출력
     num_wallets = df_preprocessed.select("Address").distinct().count()
     print(f"Final preprocessed data's Number of wallets (without Name Tag and Ether): {num_wallets}")
-    print(f"Preprocessed data saved to {output_file}.\n")
+    print(f"Preprocessed data saved to {output_path}.\n")
     
 
 def group_items_by_address(df):
@@ -56,6 +63,7 @@ def remove_duplicates_in_buckets(df):
 
 def process_bucket_itemsets(spark, input_file):
     # 데이터 로드
+    ensure_data_folder()
     df = load_data(spark, input_file)
     
     # 지갑 주소별 아이템 그룹화
@@ -63,17 +71,19 @@ def process_bucket_itemsets(spark, input_file):
     
     # 중복된 아이템 찾기
     df_duplicates = find_duplicate_items(df_buckets)
-    save_dataframe_as_single_csv(df_duplicates, "duplicate_items.csv", "duplicates_temp")
-    print(f"Duplicate items saved to 'duplicate_items.csv'.")
+    duplicates_output_path = os.path.join("data", "duplicate_items.csv")
+    save_dataframe_as_single_csv(df_duplicates, duplicates_output_path, "duplicates_temp")
+    print(f"Duplicate items saved to '{duplicates_output_path}'.")
     
     # 중복을 제거한 Bucket-Itemset 생성 및 저장
     df_buckets_deduped = remove_duplicates_in_buckets(df_buckets)
     df_buckets_deduped = df_buckets_deduped.withColumn("Items", concat_ws(",", "Items"))
-    save_dataframe_as_single_csv(df_buckets_deduped, "unique_bucket_itemsets.csv", "unique_buckets_temp")
+    deduped_output_path = os.path.join("data", "unique_bucket_itemsets.csv")
+    save_dataframe_as_single_csv(df_buckets_deduped, deduped_output_path, "unique_buckets_temp")
     
     # 중복 제거된 지갑 주소 수 출력
     unique_wallet_count = df_buckets_deduped.select("Address").distinct().count()
-    print(f"Unique bucket itemsets saved to 'unique_bucket_itemsets.csv'.")
+    print(f"Unique bucket itemsets saved to '{deduped_output_path}'.")
     print(f"Total number of unique wallets: {unique_wallet_count}")
 
 if __name__ == "__main__":
@@ -81,7 +91,7 @@ if __name__ == "__main__":
     spark = SparkSession.builder.appName("Etherscan Data Processing").getOrCreate()
 
     # Step 2: 초기 공통 전처리 수행
-    raw_input_file = "etherscan_merged_data.csv"
+    raw_input_file = os.path.join("data", "etherscan_merged_data.csv")
     preprocessed_file = "preprocessed_data.csv"
     preprocess_initial_data(spark, raw_input_file, preprocessed_file)
 

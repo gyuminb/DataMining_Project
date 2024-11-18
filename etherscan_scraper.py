@@ -2,6 +2,7 @@ import requests
 from bs4 import BeautifulSoup
 import pandas as pd
 import time
+import os
 
 # Step 1: 각 페이지에서 지갑 주소와 전체 표 정보 수집
 def get_top_accounts(page_num):
@@ -91,6 +92,11 @@ def main():
     all_accounts_data = []
     all_portfolio_data = []
 
+    data_folder = "data"
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder)
+        print(f"Created folder: {data_folder}")
+        
     # 여러 페이지에서 top accounts 가져오기
     for page_num in range(1, 401):  # 페이지 1~400까지 순회
         print(f"Fetching page {page_num}")
@@ -100,8 +106,9 @@ def main():
 
     # top accounts DataFrame으로 변환
     df_accounts = pd.DataFrame(all_accounts_data)
-    df_accounts.to_csv("etherscan_top_accounts.csv", index=False)
-    print("Top accounts data saved to etherscan_top_accounts.csv")
+    accounts_file = os.path.join(data_folder, "etherscan_top_accounts.csv")
+    df_accounts.to_csv(accounts_file, index=False)
+    print(f"Top accounts data saved to {accounts_file}")
 
     # 각 주소의 portfolio 데이터 가져오기
     for idx, account_info in enumerate(all_accounts_data, start=1):
@@ -119,8 +126,9 @@ def main():
     df_merged = pd.merge(df_portfolio, df_accounts, on="Address", how="left")
 
     # CSV 파일로 저장
-    df_merged.to_csv("etherscan_merged_data.csv", index=False)
-    print("Data saved to etherscan_merged_data.csv")
+    merged_file = os.path.join(data_folder, "etherscan_merged_data.csv")
+    df_merged.to_csv(merged_file, index=False)
+    print(f"Data saved to {merged_file}")
     
     
 if __name__ == "__main__":
