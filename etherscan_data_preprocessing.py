@@ -37,13 +37,12 @@ def preprocess_initial_data(spark, input_file, output_file, temp_dir="preprocess
     ))
     
     # Preprocessed 데이터셋 저장
-    output_path = os.path.join("data", output_file)
-    save_dataframe_as_single_csv(df_preprocessed, output_path, temp_dir)
+    save_dataframe_as_single_csv(df_preprocessed, output_file, temp_dir)
     
     # 최종 전처리된 지갑 주소 개수 출력
     num_wallets = df_preprocessed.select("Address").distinct().count()
     print(f"Final preprocessed data's Number of wallets (without Name Tag and Ether): {num_wallets}")
-    print(f"Preprocessed data saved to {output_path}.\n")
+    print(f"Preprocessed data saved to {output_file}.\n")
     
 
 def group_items_by_address(df):
@@ -92,7 +91,7 @@ if __name__ == "__main__":
 
     # Step 2: 초기 공통 전처리 수행
     raw_input_file = os.path.join("data", "etherscan_merged_data.csv")
-    preprocessed_file = "preprocessed_data.csv"
+    preprocessed_file = os.path.join("data", "preprocessed_data.csv")
     preprocess_initial_data(spark, raw_input_file, preprocessed_file)
 
     # Step 3: 전처리된 데이터 기반으로 Bucket-Itemset 처리
