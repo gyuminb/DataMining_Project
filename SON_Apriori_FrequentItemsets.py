@@ -192,34 +192,41 @@ class SONAlgorithm:
         spark.stop()
     
 if __name__ == "__main__":
+    # min_support와 min_confidence 범위 설정
+    min_support_values = [y / 100 for y in range(5, 11)]  # 0.05 ~ 0.1 (0.01 간격)
+    min_confidence_values = [y / 100 for y in range(50, 81, 10)]  # 0.5 ~ 0.8 (0.1 간격)
+    
     # 파일 경로 설정
     data_folder = "data"
     input_csv = os.path.join(data_folder, "unique_bucket_itemsets.csv")
-    frequent_itemsets_output_csv = os.path.join(data_folder, "frequent_itemsets_son.csv")
-    association_rules_output_csv = os.path.join(data_folder, "association_rules_son.csv")
-    
-    # support, confidence 설정
-    min_support = 0.05
-    min_confidence = 0.6
 
     # 데이터 로드
     df = pd.read_csv(input_csv)
     df['Items'] = df['Items'].apply(lambda x: x.split(","))
 
-    # apriori spark 기반 SON Algorithm 실행
-    son_algo = SONAlgorithm(itemsCol="Items", minSupport=min_support, minConfidence=min_confidence)
-    son_algo.fit(df)
+    # 반복 실행
+    for min_support in min_support_values:
+        for min_confidence in min_confidence_values:
+            print(f"\nRunning SON Algorithm with min_support={min_support}, min_confidence={min_confidence}")
+            
+            # 결과 파일 경로 설정
+            frequent_itemsets_output_csv = os.path.join(data_folder, f"frequent_itemsets_son_{min_support}.csv")
+            association_rules_output_csv = os.path.join(data_folder, f"association_rules_son_{min_support}_{min_confidence}.csv")
+            
+            # apriori spark 기반 SON Algorithm 실행
+            son_algo = SONAlgorithm(itemsCol="Items", minSupport=min_support, minConfidence=min_confidence)
+            son_algo.fit(df)
 
-    # 결과 출력 및 저장
-    print("Frequent Itemsets (sorted by freq):")
-    sorted_frequent_itemsets = son_algo.frequent_itemsets.sort_values(by="freq", ascending=False)
-    print(sorted_frequent_itemsets)
+            # 결과 출력 및 저장
+            sorted_frequent_itemsets = son_algo.frequent_itemsets.sort_values(by="freq", ascending=False)
+            sorted_association_rules = son_algo.association_rules.sort_values(by="confidence", ascending=False)
+            
+            print("Frequent Itemsets (sorted by freq):")
+            print(sorted_frequent_itemsets)
+            print("\nAssociation Rules (sorted by confidence):")
+            print(sorted_association_rules)
 
-    print("\nAssociation Rules (sorted by confidence):")
-    sorted_association_rules = son_algo.association_rules.sort_values(by="confidence", ascending=False)
-    print(sorted_association_rules)
-
-    sorted_frequent_itemsets.to_csv(frequent_itemsets_output_csv, index=False)
-    sorted_association_rules.to_csv(association_rules_output_csv, index=False)
-    print(f"Frequent itemsets saved to {frequent_itemsets_output_csv}")
-    print(f"Association rules saved to {association_rules_output_csv}")
+            sorted_frequent_itemsets.to_csv(frequent_itemsets_output_csv, index=False)
+            sorted_association_rules.to_csv(association_rules_output_csv, index=False)
+            print(f"Frequent itemsets saved to {frequent_itemsets_output_csv}")
+            print(f"Association rules saved to {association_rules_output_csv}")
