@@ -1,7 +1,7 @@
 import os
 import shutil
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, collect_list, concat_ws, posexplode, count, array_distinct
+from pyspark.sql.functions import when, col, collect_list, concat_ws, posexplode, count, array_distinct
 
 def ensure_data_folder(folder="data"):
     if not os.path.exists(folder):
@@ -25,6 +25,12 @@ def preprocess_initial_data(spark, input_file, output_file, temp_dir="preprocess
     
     # Name Tag가 없는 지갑 필터링
     df_filtered = df.filter(col("Name Tag").isNull())
+    
+    # Contract Address와 Address가 동일한 경우 Contract Address를 null로 변경
+    df_filtered = df_filtered.withColumn(
+        "Contract Address",
+        when(col("Address") == col("Contract Address"), None).otherwise(col("Contract Address"))
+    )
     
     # (Chain, Token, Contract Address) 아이템 생성
     df_with_items = df_filtered.withColumn("Item", concat_ws("_", col("Chain"), col("Token"), col("Contract Address")))
