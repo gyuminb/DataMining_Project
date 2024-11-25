@@ -1,107 +1,50 @@
-import os
-import shutil
-from pyspark.sql import SparkSession
-from pyspark.sql.functions import when, col, collect_list, concat_ws, posexplode, count, array_distinct
+import pandas as pd
+from sklearn.metrics.pairwise import cosine_similarity
 
-def ensure_data_folder(folder="data"):
-    if not os.path.exists(folder):
-        os.makedirs(folder)
-        print(f"Created folder: {folder}")
+# CSV 데이터 불러오기
+file_path = './preprocessed_data.csv'
+data = pd.read_csv(file_path)
 
-def load_data(spark, input_file):
-    df = spark.read.csv(input_file, header=True, inferSchema=True)
-    return df
+# 'Amount' 열에서 쉼표 제거 및 숫자로 변환
+data['Amount'] = data['Amount'].replace({',': ''}, regex=True).astype(float)
 
-def save_dataframe_as_single_csv(df, output_file, temp_dir):
-    df.coalesce(1).write.csv(temp_dir, header=True, mode="overwrite")
-    temp_file = [f for f in os.listdir(temp_dir) if f.startswith("part-")][0]
-    shutil.move(os.path.join(temp_dir, temp_file), output_file)
-    shutil.rmtree(temp_dir)
+# 피벗 테이블 생성: 지갑 주소를 행(Index), 코인을 열(Columns), 보유량(Amount)을 값으로
+pivot_data = data.pivot_table(
+    index="Address",
+    columns="Token",
+    values="Amount",
+    aggfunc="sum",
+    fill_value=0
+)
 
-def preprocess_initial_data(spark, input_file, output_file, temp_dir="preprocessed_temp"):
-    # 데이터 로드
-    ensure_data_folder()
-    df = load_data(spark, input_file)
+cosine_sim = cosine_similarity(pivot_data)
 
-    # Name Tag가 없는 지갑 필터링
-    df_filtered = df.filter(col("Name Tag").isNull())
+# 유사도 매트릭스를 DataFrame으로 변환
+similarity_df = pd.DataFrame(cosine_sim, index=pivot_data.index, columns=pivot_data.index)
 
-    # Contract Address와 Address가 동일한 경우 Contract Address를 null로 변경
-    df_filtered = df_filtered.withColumn(
-        "Contract Address",
-        when(col("Address") == col("Contract Address"), None).otherwise(col("Contract Address"))
-    )
+# 특정 지갑 주소에 기반한 추천 함수 정의
+def recommend_wallet(address, data, similarity_df, top_n=5):
+    if address not in similarity_df.index:
+        raise ValueError(f"지갑 주소 '{address}'가 데이터에 존재하지 않습니다.")
 
-    # (Chain, Token, Contract Address) 아이템 생성
-    df_with_items = df_filtered.withColumn("Item", concat_ws("_", col("Chain"), col("Token"), col("Contract Address")))
+    # 지갑의 유사도 가져오기
+    similar_wallets = similarity_df[address].sort_values(ascending=False).drop(address)  # 자기 자신 제외
+    # 유사한 지갑들의 데이터 가져오기
+    similar_wallets_data = data.loc[similar_wallets.index]
 
-    # 'ETH_Ether (ETH)' 제거 (Chain이 ETH, Token이 Ether (ETH), Contract Address가 NULL인 경우)
-    df_preprocessed = df_with_items.filter(~(
-            (col("Chain") == "ETH") &
-            (col("Token") == "Ether (ETH)") &
-            (col("Contract Address").isNull())
-    ))
+    # 추천 코인 계산 (유사 지갑의 보유량 평균)
+    weighted_average = similar_wallets_data.T.dot(similar_wallets.values) / similar_wallets.sum()
 
-    # Preprocessed 데이터셋 저장
-    save_dataframe_as_single_csv(df_preprocessed, output_file, temp_dir)
+    # 해당 지갑이 보유하지 않은 코인만 필터링
+    existing_tokens = data.loc[address][data.loc[address] > 0].index
+    recommendations = weighted_average.drop(existing_tokens).sort_values(ascending=False).head(top_n)
 
-    # 최종 전처리된 지갑 주소 개수 출력
-    num_wallets = df_preprocessed.select("Address").distinct().count()
-    print(f"Final preprocessed data's Number of wallets (without Name Tag and Ether): {num_wallets}")
-    print(f"Preprocessed data saved to {output_file}.\n")
+    return recommendations
 
+# 테스트: 특정 지갑 주소에 대해 추천 코인 실행
+address_to_recommend = "0xd7f9f54194c633f36ccd5f3da84ad4a1c38cb2cb"  # 테스트용 지갑 주소
+recommendations = recommend_wallet(address_to_recommend, pivot_data, similarity_df)
 
-def group_items_by_address(df):
-    return df.groupBy("Address").agg(collect_list("Item").alias("Items"))
-
-def find_duplicate_items(df):
-    exploded_df = df.select("Address", posexplode("Items").alias("pos", "Item"))
-    duplicate_items = exploded_df.groupBy("Address", "Item").agg(
-        count("pos").alias("count"),
-        collect_list("pos").alias("positions")
-    )
-    return duplicate_items.filter(col("count") > 1).withColumn("positions", concat_ws(",", "positions"))
-
-def remove_duplicates_in_buckets(df):
-    return df.withColumn("Items", array_distinct("Items"))
-
-
-def process_bucket_itemsets(spark, input_file):
-    # 데이터 로드
-    ensure_data_folder()
-    df = load_data(spark, input_file)
-
-    # 지갑 주소별 아이템 그룹화
-    df_buckets = group_items_by_address(df)
-
-    # 중복된 아이템 찾기
-    df_duplicates = find_duplicate_items(df_buckets)
-    duplicates_output_path = os.path.join("data", "duplicate_items.csv")
-    save_dataframe_as_single_csv(df_duplicates, duplicates_output_path, "duplicates_temp")
-    print(f"Duplicate items saved to '{duplicates_output_path}'.")
-
-    # 중복을 제거한 Bucket-Itemset 생성 및 저장
-    df_buckets_deduped = remove_duplicates_in_buckets(df_buckets)
-    df_buckets_deduped = df_buckets_deduped.withColumn("Items", concat_ws(",", "Items"))
-    deduped_output_path = os.path.join("data", "unique_bucket_itemsets.csv")
-    save_dataframe_as_single_csv(df_buckets_deduped, deduped_output_path, "unique_buckets_temp")
-
-    # 중복 제거된 지갑 주소 수 출력
-    unique_wallet_count = df_buckets_deduped.select("Address").distinct().count()
-    print(f"Unique bucket itemsets saved to '{deduped_output_path}'.")
-    print(f"Total number of unique wallets: {unique_wallet_count}")
-
-if __name__ == "__main__":
-    # Step 1: SparkSession 생성
-    spark = SparkSession.builder.appName("Etherscan Data Processing").getOrCreate()
-
-    # Step 2: 초기 공통 전처리 수행
-    raw_input_file = os.path.join("data", "etherscan_merged_data.csv")
-    preprocessed_file = os.path.join("data", "preprocessed_data.csv")
-    preprocess_initial_data(spark, raw_input_file, preprocessed_file)
-
-    # Step 3: 전처리된 데이터 기반으로 Bucket-Itemset 처리
-    process_bucket_itemsets(spark, preprocessed_file)
-
-    # Step 4: SparkSession 종료
-    spark.stop()
+# 결과 출력
+print(f"추천 코인 리스트 (지갑 주소: {address_to_recommend}):")
+print(recommendations)
