@@ -2,7 +2,7 @@ from pyspark.sql import SparkSession
 import pandas as pd
 import itertools
 from collections import defaultdict
-import os
+import os, random, time
 
 class SONAlgorithm:
     def __init__(self, itemsCol, minSupport, minConfidence):
@@ -190,11 +190,35 @@ class SONAlgorithm:
         self.generate_association_rules(rdd)
         
         spark.stop()
+
+# Address 단위로 데이터를 Train/Test로 나누고 저장
+def split_train_test_by_address(df, test_ratio=0.2, output_folder="data"):
+    # Address 단위로 무작위 샘플링
+    addresses = df['Address'].unique()
+    test_size = int(len(addresses) * test_ratio)
+
+    # Test Set에 사용할 Address 무작위 선택
+    test_addresses = random.sample(list(addresses), test_size)
+    train_addresses = list(set(addresses) - set(test_addresses))
     
+    # Training/Test 데이터 분리
+    train_df = df[df['Address'].isin(train_addresses)]
+    test_df = df[df['Address'].isin(test_addresses)]
+    
+    # 데이터 저장
+    train_path = os.path.join(output_folder, "training_set.csv")
+    test_path = os.path.join(output_folder, "test_set.csv")
+    train_df.to_csv(train_path, index=False)
+    test_df.to_csv(test_path, index=False)
+    
+    print(f"Training set saved to {train_path}, Test set saved to {test_path}")
+    print(f"Training addresses: {len(train_addresses)}, Test addresses: {len(test_addresses)}")
+    return train_df, test_df
+
 if __name__ == "__main__":
     # min_support와 min_confidence 범위 설정
-    min_support_values = [y / 100 for y in range(5, 11)]  # 0.05 ~ 0.1 (0.01 간격)
-    min_confidence_values = [y / 100 for y in range(50, 81, 10)]  # 0.5 ~ 0.8 (0.1 간격)
+    min_support_values = [y / 100 for y in range(5, 21)]  # 0.05 ~ 0.1 (0.01 간격)
+    min_confidence_values = [0.5]  # 0.5 ~ 0.8 (0.1 간격)
     
     # 파일 경로 설정
     data_folder = "data"
@@ -204,29 +228,71 @@ if __name__ == "__main__":
     df = pd.read_csv(input_csv)
     df['Items'] = df['Items'].apply(lambda x: x.split(","))
 
-    # 반복 실행
-    for min_support in min_support_values:
-        for min_confidence in min_confidence_values:
-            print(f"\nRunning SON Algorithm with min_support={min_support}, min_confidence={min_confidence}")
-            
-            # 결과 파일 경로 설정
-            frequent_itemsets_output_csv = os.path.join(data_folder, f"frequent_itemsets_son_{min_support}.csv")
-            association_rules_output_csv = os.path.join(data_folder, f"association_rules_son_{min_support}_{min_confidence}.csv")
-            
-            # apriori spark 기반 SON Algorithm 실행
-            son_algo = SONAlgorithm(itemsCol="Items", minSupport=min_support, minConfidence=min_confidence)
-            son_algo.fit(df)
+    # Train/Test 분리
+    perform_split = True  # True면 Train/Test 분리 실행, False면 전체 데이터에서 룰 생성
+    if perform_split:
+        
+        # Training/Test 결과 저장 폴더 생성
+        train_test_folder = os.path.join(data_folder, "association_rules_train_test")
+        os.makedirs(train_test_folder, exist_ok=True)
+        
+        train_df, test_df = split_train_test_by_address(df, test_ratio=0.2, output_folder=train_test_folder)
+        
+        # 고유 식별자로 타임스탬프 추가
+        timestamp = time.strftime("%Y%m%d-%H%M%S")
+    
+        # Training 데이터 기반으로 Association Rule 생성
+        for min_support in min_support_values:
+            for min_confidence in min_confidence_values:
+                print(f"\nRunning SON Algorithm on Training set with min_support={min_support}, min_confidence={min_confidence}")
+                
+                frequent_itemsets_output_csv = os.path.join(train_test_folder, f"frequent_itemsets_train_{min_support}_{timestamp}.csv")
+                association_rules_output_csv = os.path.join(train_test_folder, f"association_rules_train_{min_support}_{min_confidence}_{timestamp}.csv")
+                
+                # SON Algorithm 실행
+                son_algo = SONAlgorithm(itemsCol="Items", minSupport=min_support, minConfidence=min_confidence)
+                son_algo.fit(train_df)
 
-            # 결과 출력 및 저장
-            sorted_frequent_itemsets = son_algo.frequent_itemsets.sort_values(by="freq", ascending=False)
-            sorted_association_rules = son_algo.association_rules.sort_values(by="confidence", ascending=False)
-            
-            print("Frequent Itemsets (sorted by freq):")
-            print(sorted_frequent_itemsets)
-            print("\nAssociation Rules (sorted by confidence):")
-            print(sorted_association_rules)
+                # 결과 저장
+                sorted_frequent_itemsets = son_algo.frequent_itemsets.sort_values(by="freq", ascending=False)
+                sorted_association_rules = son_algo.association_rules.sort_values(by="confidence", ascending=False)
+                
+                print("Frequent Itemsets (sorted by freq):")
+                print(sorted_frequent_itemsets)
+                print("\nAssociation Rules (sorted by confidence):")
+                print(sorted_association_rules)
+                
+                sorted_frequent_itemsets.to_csv(frequent_itemsets_output_csv, index=False)
+                sorted_association_rules.to_csv(association_rules_output_csv, index=False)
+                print(f"Frequent itemsets saved to {frequent_itemsets_output_csv}")
+                print(f"Association rules saved to {association_rules_output_csv}")
+    else:
+        # 전체 데이터 기반으로 Association Rule 생성
+        full_data_folder = os.path.join(data_folder, "association_rules_full")
+        os.makedirs(full_data_folder, exist_ok=True)
+    
+        for min_support in min_support_values:
+            for min_confidence in min_confidence_values:
+                print(f"\nRunning SON Algorithm on Full Dataset with min_support={min_support}, min_confidence={min_confidence}")
+                
+                # 결과 파일 경로 설정
+                frequent_itemsets_output_csv = os.path.join(full_data_folder, f"frequent_itemsets_full_{min_support}.csv")
+                association_rules_output_csv = os.path.join(full_data_folder, f"association_rules_full_{min_support}_{min_confidence}.csv")
+                
+                # apriori spark 기반 SON Algorithm 실행
+                son_algo = SONAlgorithm(itemsCol="Items", minSupport=min_support, minConfidence=min_confidence)
+                son_algo.fit(df)
 
-            sorted_frequent_itemsets.to_csv(frequent_itemsets_output_csv, index=False)
-            sorted_association_rules.to_csv(association_rules_output_csv, index=False)
-            print(f"Frequent itemsets saved to {frequent_itemsets_output_csv}")
-            print(f"Association rules saved to {association_rules_output_csv}")
+                # 결과 출력 및 저장
+                sorted_frequent_itemsets = son_algo.frequent_itemsets.sort_values(by="freq", ascending=False)
+                sorted_association_rules = son_algo.association_rules.sort_values(by="confidence", ascending=False)
+                
+                print("Frequent Itemsets (sorted by freq):")
+                print(sorted_frequent_itemsets)
+                print("\nAssociation Rules (sorted by confidence):")
+                print(sorted_association_rules)
+            
+                sorted_frequent_itemsets.to_csv(frequent_itemsets_output_csv, index=False)
+                sorted_association_rules.to_csv(association_rules_output_csv, index=False)
+                print(f"Frequent itemsets saved to {frequent_itemsets_output_csv}")
+                print(f"Association rules saved to {association_rules_output_csv}")
