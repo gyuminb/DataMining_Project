@@ -81,8 +81,8 @@ if __name__ == "__main__":
     spark = SparkSession.builder.appName("Etherscan Data Processing").getOrCreate()
 
     # Step 2: 초기 공통 전처리 수행
-    raw_input_file = "etherscan_merged_data.csv"
-    preprocessed_file = "Clustering/preprocessed_data.csv"
+    raw_input_file = os.path.join("data", "etherscan_merged_data.csv")
+    preprocessed_file = os.path.join("data", "preprocessed_data.csv")
     preprocess_initial_data(spark, raw_input_file, preprocessed_file)
 
     # Step 3: 전처리된 데이터 기반으로 Bucket-Itemset 처리
