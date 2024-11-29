@@ -77,7 +77,7 @@ def preprocess_user_portfolio_data(portfolio_data):
     
     # Portfolio % 다시 계산
     total_amount = df['Amount'].sum()
-    print(f"총 Amount: {total_amount}")
+    # print(f"총 Amount: {total_amount}")
     
     if total_amount > 0:
         df['Portfolio %'] = (df['Amount'] / total_amount) * 100
