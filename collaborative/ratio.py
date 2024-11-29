@@ -1,6 +1,6 @@
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import MinMaxScaler
+
 
 # CSV 데이터 불러오기
 file_path = './preprocessed_data.csv'
@@ -18,22 +18,16 @@ data['AmountRatio'] = data['Amount'] / data['TotalAmount']
 # 피벗 테이블 생성: 지갑 주소를 행(Index), 코인을 열(Columns), 보유 비율(AmountRatio)을 값으로
 pivot_data = data.pivot_table(
     index="Address",
-    columns="Token",
+    columns="Item",
     values="AmountRatio",
     aggfunc="sum",
     fill_value=0  # 비율이 없는 경우 0으로 채움
 )
 
-# 정규화 수행 (Min-Max Scaling)
-scaler = MinMaxScaler()
-normalized_pivot_data = pd.DataFrame(
-    scaler.fit_transform(pivot_data),
-    index=pivot_data.index,
-    columns=pivot_data.columns
-)
+
 
 # 코사인 유사도 계산
-cosine_sim = cosine_similarity(normalized_pivot_data)
+cosine_sim = cosine_similarity(pivot_data)
 
 # 유사도 매트릭스를 DataFrame으로 변환
 similarity_df = pd.DataFrame(cosine_sim, index=pivot_data.index, columns=pivot_data.index)
