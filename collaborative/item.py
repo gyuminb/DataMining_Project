@@ -60,7 +60,7 @@ def recommend_items_item_based(address, data, item_similarity_df, top_n=5):
     return recommendations
 
 # 테스트: 특정 지갑 주소에 대해 추천 코인 실행
-address_to_recommend = "0x062a31bd836cecb1b6bc82bb107c8940a0e6a01d"  # 테스트용 지갑 주소
+address_to_recommend = "0x745869e92b46c5a4b959d5432ecc05a0b87d911a"  # 테스트용 지갑 주소
 recommendations = recommend_items_item_based(
     address_to_recommend,
     pivot_data,

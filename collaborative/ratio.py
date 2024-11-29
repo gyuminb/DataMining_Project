@@ -92,7 +92,7 @@ def recommend_wallet(address, data, similarity_df, global_mean, user_bias, item_
     return recommendations
 
 # 테스트: 특정 지갑 주소에 대해 추천 코인 실행
-address_to_recommend = "0x062a31bd836cecb1b6bc82bb107c8940a0e6a01d"  # 테스트용 지갑 주소
+address_to_recommend = "0x745869e92b46c5a4b959d5432ecc05a0b87d911a"  # 테스트용 지갑 주소
 recommendations = recommend_wallet(
     address_to_recommend,
     pivot_data,
@@ -100,8 +100,8 @@ recommendations = recommend_wallet(
     global_mean,
     user_bias,
     item_bias,
-    top_n=15,
-    k=8,  # 유사 사용자 수
+    top_n=10,
+    k=5,  # 유사 사용자 수
     min_similarity=0.5,  # 유사도 임계값
     alpha=0.7  # Baseline vs. CF 점수 비율
 )
