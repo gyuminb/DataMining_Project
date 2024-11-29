@@ -9,22 +9,25 @@ data = pd.read_csv(file_path)
 # 'Amount' 열에서 쉼표 제거 및 숫자로 변환
 data['Amount'] = data['Amount'].replace({',': ''}, regex=True).astype(float)
 
-# 피벗 테이블 생성: 지갑 주소를 행(Index), 코인을 열(Columns), 보유량(Amount)을 값으로
+# 각 지갑 주소별 총 보유량 계산
+data['TotalAmount'] = data.groupby('Address')['Amount'].transform('sum')
+
+# 각 지갑 주소와 코인의 보유 비율 계산
+data['AmountRatio'] = data['Amount'] / data['TotalAmount']
+
+# 피벗 테이블 생성: 지갑 주소를 행(Index), 코인을 열(Columns), 보유 비율(AmountRatio)을 값으로
 pivot_data = data.pivot_table(
     index="Address",
     columns="Token",
-    values="Amount",
+    values="AmountRatio",
     aggfunc="sum",
-    fill_value=0
+    fill_value=0  # 비율이 없는 경우 0으로 채움
 )
-
-# 보유 비율 계산: 각 지갑의 총 보유량으로 나누기
-pivot_data_ratio = pivot_data.div(pivot_data.sum(axis=1), axis=0)
 
 # 정규화 수행 (Min-Max Scaling)
 scaler = MinMaxScaler()
 normalized_pivot_data = pd.DataFrame(
-    scaler.fit_transform(pivot_data_ratio),
+    scaler.fit_transform(pivot_data),
     index=pivot_data.index,
     columns=pivot_data.columns
 )
@@ -52,7 +55,7 @@ def calculate_baseline_predictor(pivot_data):
     return global_mean, user_bias, item_bias
 
 # Baseline Predictor 계산
-global_mean, user_bias, item_bias = calculate_baseline_predictor(pivot_data_ratio)
+global_mean, user_bias, item_bias = calculate_baseline_predictor(pivot_data)
 
 # 추천 함수: 최적 조건 반영
 def recommend_wallet(address, data, similarity_df, global_mean, user_bias, item_bias, top_n=5, k=5, min_similarity=0.5, alpha=0.7):
@@ -92,13 +95,13 @@ def recommend_wallet(address, data, similarity_df, global_mean, user_bias, item_
 address_to_recommend = "0x062a31bd836cecb1b6bc82bb107c8940a0e6a01d"  # 테스트용 지갑 주소
 recommendations = recommend_wallet(
     address_to_recommend,
-    pivot_data_ratio,
+    pivot_data,
     similarity_df,
     global_mean,
     user_bias,
     item_bias,
-    top_n=5,
-    k=5,  # 유사 사용자 수
+    top_n=15,
+    k=8,  # 유사 사용자 수
     min_similarity=0.5,  # 유사도 임계값
     alpha=0.7  # Baseline vs. CF 점수 비율
 )
