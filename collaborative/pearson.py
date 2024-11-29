@@ -17,16 +17,19 @@ pivot_data = data.pivot_table(
     fill_value=0
 )
 
-# 코사인 유사도 계산
-cosine_sim = cosine_similarity(pivot_data)
+# 행 평균 중심화
+centered_pivot_data = pivot_data.subtract(pivot_data.mean(axis=1), axis=0)
+
+# 중심화된 코사인 유사도 계산
+cosine_sim = cosine_similarity(centered_pivot_data)
 
 # 유사도 매트릭스를 DataFrame으로 변환
 similarity_df = pd.DataFrame(cosine_sim, index=pivot_data.index, columns=pivot_data.index)
 
-# 특정 지갑 주소에 기반한 추천 함수 정의
-def recommend_wallet(address, data, similarity_df, top_n=5, k=3):
+# 특정 지갑 주소에 기반한 추천 함수 정의 (강의 노트 이론 적용)
+def recommend_wallet_centered_cosine(address, data, similarity_df, top_n=5, k=3):
     """
-    Recommend tokens based on User-User Collaborative Filtering using cosine similarity.
+    Centered Cosine Similarity 기반 추천 함수 (강의 노트 이론 반영)
     """
     if address not in similarity_df.index:
         raise ValueError(f"지갑 주소 '{address}'가 데이터에 존재하지 않습니다.")
@@ -51,10 +54,9 @@ def recommend_wallet(address, data, similarity_df, top_n=5, k=3):
 
     return recommendations
 
-
 # 테스트: 특정 지갑 주소에 대해 추천 코인 실행
 address_to_recommend = "0x062a31bd836cecb1b6bc82bb107c8940a0e6a01d"  # 테스트용 지갑 주소
-recommendations = recommend_wallet(address_to_recommend, pivot_data, similarity_df)
+recommendations = recommend_wallet_centered_cosine(address_to_recommend, pivot_data, similarity_df)
 
 # 결과 출력
 print(f"추천 코인 리스트 (지갑 주소: {address_to_recommend}):")

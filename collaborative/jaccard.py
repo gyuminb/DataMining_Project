@@ -1,5 +1,6 @@
 import pandas as pd
-from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.metrics import jaccard_score
+from sklearn.preprocessing import Binarizer
 
 # CSV 데이터 불러오기
 file_path = './preprocessed_data.csv'
@@ -17,35 +18,54 @@ pivot_data = data.pivot_table(
     fill_value=0
 )
 
-# 코사인 유사도 계산
-cosine_sim = cosine_similarity(pivot_data)
+# 이진화 (0/1로 변환, 보유 여부만 표시)
+binarizer = Binarizer(threshold=0)
+binary_pivot_data = pd.DataFrame(
+    binarizer.fit_transform(pivot_data),
+    index=pivot_data.index,
+    columns=pivot_data.columns
+)
 
-# 유사도 매트릭스를 DataFrame으로 변환
-similarity_df = pd.DataFrame(cosine_sim, index=pivot_data.index, columns=pivot_data.index)
+# 자카드 유사도 매트릭스 생성 (벡터화)
+from scipy.spatial.distance import pdist, squareform
+
+def compute_jaccard_similarity_optimized(binary_data):
+    """
+    Calculate pairwise Jaccard similarity using vectorized operations.
+    """
+    jaccard_distances = pdist(binary_data, metric="jaccard")
+    jaccard_similarity_matrix = 1 - squareform(jaccard_distances)
+
+    # DataFrame으로 변환
+    addresses = binary_data.index
+    similarity_df = pd.DataFrame(jaccard_similarity_matrix, index=addresses, columns=addresses)
+    return similarity_df
+
+
+similarity_df = compute_jaccard_similarity_optimized(binary_pivot_data)
 
 # 특정 지갑 주소에 기반한 추천 함수 정의
-def recommend_wallet(address, data, similarity_df, top_n=5, k=3):
+def recommend_wallet_user_based(address, data, similarity_df, top_n=5, k=3):
     """
-    Recommend tokens based on User-User Collaborative Filtering using cosine similarity.
+    Recommend tokens based on User-User Collaborative Filtering.
     """
     if address not in similarity_df.index:
         raise ValueError(f"지갑 주소 '{address}'가 데이터에 존재하지 않습니다.")
 
-    # Step 1: k명의 가장 유사한 사용자 선택
+    # 1. k명의 가장 유사한 사용자 선택
     similar_wallets = similarity_df[address].sort_values(ascending=False).drop(address).head(k)
 
-    # Step 2: 각 토큰의 점수 예측 (가중 평균 방식)
+    # 2. 각 아이템에 대한 점수 예측
     weighted_scores = {}
     for token in data.columns:
-        # 유사한 사용자들의 보유량과 유사도를 사용하여 가중 평균 계산
+        # 유사 사용자들의 평가 점수와 유사도를 가중 평균으로 계산
         scores = [
-            (data.loc[user, token] * similarity)  # 보유량 * 유사도
+            (data.loc[user, token] * similarity)
             for user, similarity in similar_wallets.items()
         ]
-        # 점수 계산 및 저장
         weighted_scores[token] = sum(scores) / similar_wallets.sum()
 
-    # Step 3: 해당 지갑이 이미 보유한 토큰 제외
+    # 3. 해당 사용자가 이미 보유한 아이템 제외
     existing_tokens = data.loc[address][data.loc[address] > 0].index
     recommendations = pd.Series(weighted_scores).drop(existing_tokens).sort_values(ascending=False).head(top_n)
 
@@ -54,7 +74,7 @@ def recommend_wallet(address, data, similarity_df, top_n=5, k=3):
 
 # 테스트: 특정 지갑 주소에 대해 추천 코인 실행
 address_to_recommend = "0x062a31bd836cecb1b6bc82bb107c8940a0e6a01d"  # 테스트용 지갑 주소
-recommendations = recommend_wallet(address_to_recommend, pivot_data, similarity_df)
+recommendations = recommend_wallet_user_based(address_to_recommend, pivot_data, similarity_df)
 
 # 결과 출력
 print(f"추천 코인 리스트 (지갑 주소: {address_to_recommend}):")
