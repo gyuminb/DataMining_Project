@@ -57,10 +57,10 @@ def calculate_baseline_predictor(pivot_data):
 # Baseline Predictor 계산
 global_mean, user_bias, item_bias = calculate_baseline_predictor(pivot_data)
 
-# 추천 함수: 최적 조건 반영
-def recommend_wallet(address, data, similarity_df, global_mean, user_bias, item_bias, top_n=5, k=5, min_similarity=0.5, alpha=0.7):
+# 추천 함수: 변화량(delta)을 반영한 협업 필터링
+def recommend_wallet_with_delta(address, data, similarity_df, global_mean, user_bias, item_bias, top_n=5, k=5, min_similarity=0.5):
     """
-    Recommend tokens with optimal conditions using Baseline Predictor and cosine similarity.
+    Recommend tokens using Baseline Predictor with delta modeling.
     """
     if address not in similarity_df.index:
         raise ValueError(f"지갑 주소 '{address}'가 데이터에 존재하지 않습니다.")
@@ -72,18 +72,18 @@ def recommend_wallet(address, data, similarity_df, global_mean, user_bias, item_
     # Step 2: 각 토큰의 점수 예측
     weighted_scores = {}
     for token in data.columns:
-        # Baseline Predictor: μ + b_u + b_i
+        # Baseline 점수 계산: b_ui = μ + b_u + b_i
         baseline_score = global_mean + user_bias[address] + item_bias[token]
 
-        # 협업 필터링 기반 점수: 가중 평균
-        scores = [
-            (data.loc[user, token] * similarity)  # 보유 비율 * 유사도
+        # 협업 필터링 점수 계산 (변화량 기반)
+        delta_scores = [
+            (data.loc[user, token] - (global_mean + user_bias[user] + item_bias[token])) * similarity
             for user, similarity in similar_wallets.items()
         ]
-        weighted_average = sum(scores) / similar_wallets.sum() if similar_wallets.sum() > 0 else 0
+        delta_average = sum(delta_scores) / similar_wallets.sum() if similar_wallets.sum() > 0 else 0
 
-        # 최종 점수: α * Baseline + (1 - α) * 가중 평균
-        weighted_scores[token] = alpha * baseline_score + (1 - alpha) * weighted_average
+        # 최종 점수: Baseline + 변화량 기반 협업 필터링 점수
+        weighted_scores[token] = baseline_score + delta_average
 
     # Step 3: 해당 지갑이 이미 보유한 토큰 제외
     existing_tokens = data.loc[address][data.loc[address] > 0].index
@@ -93,17 +93,16 @@ def recommend_wallet(address, data, similarity_df, global_mean, user_bias, item_
 
 # 테스트: 특정 지갑 주소에 대해 추천 코인 실행
 address_to_recommend = "0x745869e92b46c5a4b959d5432ecc05a0b87d911a"  # 테스트용 지갑 주소
-recommendations = recommend_wallet(
+recommendations = recommend_wallet_with_delta(
     address_to_recommend,
     pivot_data,
     similarity_df,
     global_mean,
     user_bias,
     item_bias,
-    top_n=10,
+    top_n=5,
     k=5,  # 유사 사용자 수
-    min_similarity=0.5,  # 유사도 임계값
-    alpha=0.7  # Baseline vs. CF 점수 비율
+    min_similarity=0.5  # 유사도 임계값
 )
 
 # 결과 출력
