@@ -102,3 +102,69 @@ recommendations = recommend_wallet_with_delta(
 # 결과 출력
 print(f"추천 코인 리스트 (지갑 주소: {address_to_recommend}):")
 print(recommendations)
+
+
+# 특정 Item의 점수와 순위를 반환하는 함수
+def get_item_rank(address, item, data, similarity_df, global_mean, user_bias, item_bias, k=5, min_similarity=0.5):
+    """
+    Get the score and rank of a specific item for a given address.
+    """
+    if address not in similarity_df.index:
+        raise ValueError(f"지갑 주소 '{address}'가 데이터에 존재하지 않습니다.")
+    if item not in data.columns:
+        raise ValueError(f"아이템 '{item}'이 데이터에 존재하지 않습니다.")
+
+    # Step 1: 모든 아이템 점수 계산
+    all_scores = {}
+    similar_wallets = similarity_df[address].sort_values(ascending=False).drop(address)
+    similar_wallets = similar_wallets[similar_wallets > min_similarity].head(k)
+
+    for current_item in data.columns:
+        # Baseline 점수 계산
+        baseline_score = global_mean + user_bias[address] + item_bias[current_item]
+
+        # 협업 필터링 점수 계산 (변화량 기반)
+        delta_scores = [
+            (data.loc[user, current_item] - (global_mean + user_bias[user] + item_bias[current_item])) * similarity
+            for user, similarity in similar_wallets.items()
+        ]
+        delta_average = sum(delta_scores) / similar_wallets.sum() if similar_wallets.sum() > 0 else 0
+
+        # 최종 점수 계산
+        final_score = baseline_score + delta_average
+        if abs(final_score) < 1e-10:  # 작은 값은 0으로 처리
+            final_score = 0
+        all_scores[current_item] = final_score
+
+    # Step 2: 점수를 기준으로 정렬하여 순위 계산
+    sorted_scores = pd.Series(all_scores).sort_values(ascending=False)
+    rank = sorted_scores.rank(ascending=False)
+
+    # Step 3: 원하는 Item의 점수와 순위 반환
+    if item not in sorted_scores.index:
+        raise ValueError(f"아이템 '{item}'이 점수 계산 결과에 존재하지 않습니다.")
+    item_score = sorted_scores[item]
+    item_rank = rank[item]
+
+    return item_score, item_rank
+
+# 테스트: 특정 Item의 점수와 순위 계산
+address_to_recommend = "0x745869e92b46c5a4b959d5432ecc05a0b87d911a"  # 테스트용 지갑 주소
+item_to_check = "ETH_Ducky (DUCKY)_0x699ec925118567b6475fe495327ba0a778234aaa"  # 테스트용 아이템 이름
+
+item_score, item_rank = get_item_rank(
+    address_to_recommend,
+    item_to_check,
+    pivot_data,
+    similarity_df,
+    global_mean,
+    user_bias,
+    item_bias,
+    k=5,  # 유사 사용자 수
+    min_similarity=0.5  # 유사도 임계값
+)
+
+# 결과 출력
+print(f"지갑 주소: {address_to_recommend}, 아이템: {item_to_check}")
+print(f"점수: {item_score}, 순위: {int(item_rank)}")
+
