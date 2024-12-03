@@ -124,7 +124,7 @@ def recommend_items_based_on_association_rule(user_portfolio, association_rules_
 if __name__ == "__main__":
     # 사용자로부터 지갑 주소 입력받기
     user_address = input("Enter the user's wallet address: ").strip()
-    association_rules_csv = input("Enter the path to the association rules CSV file: ").strip()
+    association_rules_csv = 'data/association_rules_full_base_0.05_0.7.csv'
 
     # 스크래핑으로 포트폴리오 데이터 가져오기
     print(f"\nFetching portfolio for address: {user_address}")

@@ -215,7 +215,7 @@ def split_train_test_by_address(df, test_ratio=0.2, output_folder="data"):
     print(f"Training addresses: {len(train_addresses)}, Test addresses: {len(test_addresses)}")
     return train_df, test_df
 
-def SON_Apriori_FrequentItemsets_AssociationRule_analyze():
+if __name__ == "__main__":
     # min_support와 min_confidence 범위 설정
     min_support_values = [y / 100 for y in range(5, 21)]  # 0.05 ~ 0.2 (0.01 간격)
     min_confidence_values = [y / 100 for y in range(50, 81, 10)]  # 0.5 ~ 0.8 (0.1 간격)
@@ -232,7 +232,7 @@ def SON_Apriori_FrequentItemsets_AssociationRule_analyze():
     timestamp = time.strftime("%Y%m%d-%H%M%S")
         
     # Train/Test 분리
-    perform_split = False  # True면 Train/Test 분리 실행, False면 전체 데이터에서 룰 생성
+    perform_split = True  # True면 Train/Test 분리 실행, False면 전체 데이터에서 룰 생성
     if perform_split:
         
         # Training/Test 결과 저장 폴더 생성
