@@ -236,7 +236,7 @@ if __name__ == "__main__":
     file_path = './data/preprocessed_data.csv'
     
     # Portfolio 데이터 처리 및 유틸리티 매트릭스 생성
-    address_data = pd.read_csv('./collaborative_validation_address.csv')
+    address_data = pd.read_csv('./data/collaborative_validation_address.csv')
     
     portfolio_data_list = []
     removed_items_dict = {} 
