@@ -68,22 +68,24 @@ def preprocess_user_portfolio_data(portfolio_data):
     # 'ETH_Ether (ETH)' 제거 (Chain이 ETH, Token이 Ether (ETH), Contract Address가 NULL인 경우)
     df = df[~((df['Chain'] == 'ETH') & (df['Token'] == 'Ether (ETH)') & (df['Contract Address'].isna()))]
 
-    # 쉼표 제거 후 Amount 열을 숫자로 변환
-    df['Amount'] = df['Amount'].str.replace(',', '')  # 쉼표 제거
-    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')  # 숫자로 변환
-    
-    # NaN 또는 0인 Amount 제거
-    df = df[df['Amount'] > 0]
-    
-    # Portfolio % 다시 계산
-    total_amount = df['Amount'].sum()
-    # print(f"총 Amount: {total_amount}")
-    
-    if total_amount > 0:
-        df['Portfolio %'] = (df['Amount'] / total_amount) * 100
-    else:
-        df['Portfolio %'] = 0  # 전체 Amount가 0인 경우
-    
+    # 쉼표 제거 후 Amount와 Value 숫자로 변환
+    df['Amount'] = df['Amount'].str.replace(',', '', regex=True)
+    df['Amount'] = pd.to_numeric(df['Amount'], errors='coerce')
+    df['Value'] = df['Value'].str.replace('[\$,]', '', regex=True)
+    df['Value'] = pd.to_numeric(df['Value'], errors='coerce')
+
+    # NaN 또는 0 이하 제거
+    df = df.dropna(subset=['Amount', 'Value'])
+    df = df[(df['Amount'] > 0) & (df['Value'] > 0)]
+
+    # 투자 가치 계산
+    df['Total Asset Value'] = df['Amount'] * df['Value']
+    total_portfolio_value = df['Total Asset Value'].sum()
+    # print(f"총 포트폴리오 가치: {total_portfolio_value:.2f}")
+
+    # 투자 가치 비율 계산
+    df['Investment Ratio'] = (df['Total Asset Value'] / total_portfolio_value) * 100
+
     return df
     
 # Association Rule을 기반으로 추천 아이템 생성
@@ -136,7 +138,7 @@ if __name__ == "__main__":
 
     # 사용자 포트폴리오 출력
     print("\nUser Portfolio Information:")
-    print(portfolio_df[["Item", "Portfolio %", "Amount", "Value"]])
+    print(portfolio_df[["Item", "Investment Ratio", "Amount", "Value"]])
     
     # 사용자 포트폴리오 아이템 리스트 생성
     user_portfolio = portfolio_df['Item'].tolist()

@@ -72,7 +72,7 @@ if __name__ == "__main__":
 
     # 사용자 포트폴리오 출력
     print("\n[USER PORTFOLIO]")
-    print(portfolio_df[["Item", "Portfolio %", "Amount", "Value"]].to_string(index=False))
+    print(portfolio_df[["Item", "Investment Ratio", "Amount", "Value"]].to_string(index=False))
     
     # 사용자 포트폴리오 아이템 리스트 생성
     user_portfolio = portfolio_df['Item'].tolist()
@@ -96,12 +96,12 @@ if __name__ == "__main__":
     # Collaborative Filtering 기반 추천 (User-Based)
     print("\n[INFO] Calculating User-Based Collaborative Filtering Recommendations...")
     file_path = './data/preprocessed_data.csv'
-    pivot_data = preprocess_data(file_path, portfolio_df)
+    pivot_data, address_mean_investment_ratio_shift = preprocess_data(file_path, portfolio_df)
     
     row_similarity_df = calculate_row_similarity(pivot_data)
     global_mean, row_bias, col_bias = calculate_baseline_predictor(pivot_data)
     
-    user_predicted_values = CF_baseline_predictor_userbased(user_address, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, top_k=5)
+    user_predicted_values = CF_baseline_predictor_userbased(user_address, pivot_data, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5)
     user_sorted_predicted_values = dict(sorted(user_predicted_values.items(), key=lambda x: x[1], reverse=True))
     user_top_5_predictions = dict(list(user_sorted_predicted_values.items())[:5])
     
@@ -114,7 +114,7 @@ if __name__ == "__main__":
     row_similarity_df = calculate_row_similarity(pivot_data.T)
     global_mean, row_bias, col_bias = calculate_baseline_predictor(pivot_data.T)
     
-    item_predicted_values = CF_baseline_predictor_itembased(user_address, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, top_k=5)
+    item_predicted_values = CF_baseline_predictor_itembased(user_address, pivot_data, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5)
     item_sorted_predicted_values = dict(sorted(item_predicted_values.items(), key=lambda x: x[1], reverse=True))
     item_top_5_predictions = dict(list(item_sorted_predicted_values.items())[:5])
     

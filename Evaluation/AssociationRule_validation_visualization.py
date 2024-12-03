@@ -30,13 +30,18 @@ def visualize_2d_heatmap(summary_csv):
             axes[i].set_title(f"{validation_type} - {metric}", fontsize=14)
             axes[i].set_xlabel("Min Confidence", fontsize=12)
             axes[i].set_ylabel("Min Support", fontsize=12)
-            
+
             # x축 텍스트 위치 조정
             axes[i].tick_params(axis='x', labelsize=10, rotation=45, pad=10)  # pad로 아래로 이동
             axes[i].tick_params(axis='y', labelsize=10)
+            
+            # y-axis label 간격 조정
+            axes[i].yaxis.label.set_size(12)
 
-        plt.tight_layout(pad=3.0)  # 여백 추가
+        plt.tight_layout(pad=2.5)  # 여백 추가
+        plt.subplots_adjust(hspace=0.4)  # 서브플롯 간 간격 조정
         plt.show()
+
 
 
 

@@ -138,7 +138,7 @@ if __name__ == "__main__":
 
     # 사용자 포트폴리오 출력
     print("\nUser Portfolio Information:")
-    print(portfolio_df[["Item", "Portfolio %", "Amount", "Value"]])
+    print(portfolio_df[["Item", "Investment Ratio", "Amount", "Value"]])
     
     # 사용자 포트폴리오 아이템 리스트 생성
     user_portfolio = portfolio_df['Item'].tolist()
