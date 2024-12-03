@@ -232,7 +232,7 @@ if __name__ == "__main__":
     timestamp = time.strftime("%Y%m%d-%H%M%S")
         
     # Train/Test 분리
-    perform_split = False  # True면 Train/Test 분리 실행, False면 전체 데이터에서 룰 생성
+    perform_split = True  # True면 Train/Test 분리 실행, False면 전체 데이터에서 룰 생성
     if perform_split:
         
         # Training/Test 결과 저장 폴더 생성

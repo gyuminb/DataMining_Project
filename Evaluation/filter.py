@@ -18,7 +18,7 @@ addresses_with_7_or_more_tokens = (
 unique_addresses = pd.DataFrame(addresses_with_7_or_more_tokens, columns=["Address"])
 
 # 결과를 CSV 파일로 저장
-output_file_path = 'collaborative_validation_address.csv'
+output_file_path = './data/collaborative_validation_address.csv'
 unique_addresses.to_csv(output_file_path, index=False)
 
 print(f"Unique addresses saved to {output_file_path}")
