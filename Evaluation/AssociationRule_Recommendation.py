@@ -81,7 +81,7 @@ def preprocess_user_portfolio_data(portfolio_data):
     # 투자 가치 계산
     df['Total Asset Value'] = df['Amount'] * df['Value']
     total_portfolio_value = df['Total Asset Value'].sum()
-    print(f"총 포트폴리오 가치: {total_portfolio_value:.2f}")
+    # print(f"총 포트폴리오 가치: {total_portfolio_value:.2f}")
 
     # 투자 가치 비율 계산
     df['Investment Ratio'] = (df['Total Asset Value'] / total_portfolio_value) * 100

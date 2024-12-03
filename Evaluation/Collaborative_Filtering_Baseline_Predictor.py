@@ -1,8 +1,8 @@
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from AssociationRule_Recommendation import get_wallet_portfolio, preprocess_user_portfolio_data
-import random
-import numpy as np
+import time
+
 def preprocess_data(file_path, user_data):
     # 기존 데이터 로드
     data = pd.read_csv(file_path)
@@ -241,8 +241,9 @@ if __name__ == "__main__":
     portfolio_data_list = []
     removed_items_dict = {} 
     real_portfolio_data_list =[]
-    for addr in address_data["Address"]:
-        print(f"\nFetching portfolio for address: {addr}")
+    
+    for idx, addr in enumerate(address_data["Address"], start=1):
+        print(f"\nFetching portfolio for address: {addr} (Progress: {idx}/{len(address_data)})")
         user_portfolio_data = get_wallet_portfolio(addr)
         if not user_portfolio_data:
             print(f"Failed to retrieve portfolio data for address {addr}. Skipping.")
@@ -254,6 +255,7 @@ if __name__ == "__main__":
         portfolio_data_list.append(updated_portfolio)
         real_portfolio_data_list.append(real_data)
         removed_items_dict[addr] = removed_items
+        time.sleep(1)  # 서버로부터 블락을 피하기 위해 딜레이 추가
 
     #print("\n\nremoved item list : ",removed_items_dict,"\n\n")
 
