@@ -104,6 +104,7 @@ if __name__ == "__main__":
     user_predicted_values = CF_baseline_predictor_userbased(user_address, pivot_data, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5)
     user_sorted_predicted_values = dict(sorted(user_predicted_values.items(), key=lambda x: x[1], reverse=True))
     user_top_5_predictions = dict(list(user_sorted_predicted_values.items())[:5])
+    user_top_50_predictions = dict(list(user_sorted_predicted_values.items())[:50])
     
     print("\n[USER-BASED TOP 5 PREDICTIONS]")
     for item, value in user_top_5_predictions.items():
@@ -117,13 +118,13 @@ if __name__ == "__main__":
     item_predicted_values = CF_baseline_predictor_itembased(user_address, pivot_data, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5)
     item_sorted_predicted_values = dict(sorted(item_predicted_values.items(), key=lambda x: x[1], reverse=True))
     item_top_5_predictions = dict(list(item_sorted_predicted_values.items())[:5])
-    
+    item_top_50_predictions = dict(list(item_sorted_predicted_values.items())[:50])
     print("\n[ITEM-BASED TOP 5 PREDICTIONS]")
     for item, value in item_top_5_predictions.items():
         print(f" - {item}: {value:.4f}")
 
     # 최종 추천 리스트
-    diverse_recommendations = combine_recommendations_with_deduplication(applicable_rules, user_top_5_predictions, item_top_5_predictions, top_n = 10)
+    diverse_recommendations = combine_recommendations_with_deduplication(applicable_rules, user_top_50_predictions, item_top_50_predictions, top_n = 10)
     
     print("\n[FINAL RECOMMENDATIONS]")
     print("Rank | Item                                         | Score")
