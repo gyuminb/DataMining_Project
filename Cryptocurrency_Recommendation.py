@@ -1,8 +1,10 @@
-from SON_Apriori_FrequentItemsets_AssociationRule import SON_Apriori_FrequentItemsets_AssociationRule_analyze
+#from SON_Apriori_FrequentItemsets_AssociationRule import SON_Apriori_FrequentItemsets_AssociationRule_analyze
 from AssociationRule_Recommendation import get_wallet_portfolio, preprocess_user_portfolio_data, recommend_items_based_on_association_rule
 from Collaborative_Filtering_Baseline_Predictor import preprocess_data, calculate_row_similarity, calculate_baseline_predictor, CF_baseline_predictor_userbased, CF_baseline_predictor_itembased
 import os, random, ast
-
+import warnings
+# SyntaxWarning 무시 설정
+warnings.filterwarnings("ignore", category=SyntaxWarning)
 def combine_recommendations_with_deduplication(association_rules, user_based_cf, item_based_cf, top_n = 10):
     final_scores = {}
 
