@@ -51,15 +51,19 @@ def preprocess_data(file_path, user_data):
 
     )
     pivot_data = pivot_data.fillna(0)
+    
+    pivot_removed_mean_data = pivot_data.copy()
+    pivot_removed_mean_data = pivot_removed_mean_data.fillna(0)
     # 각 지갑의 평균값을 피봇 테이블에서 빼기
-    for address in pivot_data.index:
-        pivot_data.loc[address] = pivot_data.loc[address].apply(
+
+    for address in pivot_removed_mean_data.index:
+        pivot_removed_mean_data.loc[address] = pivot_removed_mean_data.loc[address].apply(
             lambda value: value - address_mean_investment_ratio_shift[address] if value != 0 else 0
         )
 
     #print(pivot_data)
 
-    return pivot_data, address_mean_investment_ratio_shift
+    return pivot_data,pivot_removed_mean_data ,address_mean_investment_ratio_shift
 
 def create_pivot_data_from_portfolio(combined_real_portfolio_data):
     
@@ -151,7 +155,7 @@ def CF_baseline_predictor_itembased(address, pivot_data,address_mean_investment_
                 rating = pivot_data.loc[address, similar_item]
                 bias = global_mean + row_bias[similar_item] + col_bias[address]
                 result += (similarity_score / K_similar_items.sum()) * (rating - bias)
-        result += global_mean + row_bias[item] + col_bias[address] + address_mean_investment_ratio_shift[address]
+        result += global_mean + row_bias[item] + col_bias[address] #+ address_mean_investment_ratio_shift[address]
         predicted_values[item] = result
     
     return predicted_values
@@ -329,16 +333,16 @@ if __name__ == "__main__":
     combined_real_portfolio_data = pd.concat(real_portfolio_data_list, ignore_index=True)
 
     real_data = create_pivot_data_from_portfolio(combined_real_portfolio_data)
-    pivot_data, address_mean_investment_ratio_shift = preprocess_data(file_path, combined_portfolio_data)
+    pivot_data, pivot_removed_mean_data,address_mean_investment_ratio_shift = preprocess_data(file_path, combined_portfolio_data)
 
     # User-based 병렬 계산
-    row_similarity_df = calculate_row_similarity(pivot_data)
-    global_mean, row_bias, col_bias = calculate_baseline_predictor(pivot_data)
+    row_similarity_df = calculate_row_similarity(pivot_removed_mean_data)
+    global_mean, row_bias, col_bias = calculate_baseline_predictor(pivot_removed_mean_data)
     removed_user_based_differences = process_differences_with_limited_cores(
         worker_function=user_based_worker,
         removed_items_dict=removed_items_dict,
         real_data=real_data,
-        pivot_data=pivot_data,
+        pivot_data=pivot_removed_mean_data,
         row_similarity_df=row_similarity_df,
         global_mean=global_mean,
         row_bias=row_bias,
@@ -371,7 +375,7 @@ if __name__ == "__main__":
             print(f" - {item}: {diff:.20f}")
 
     # RMSE 계산
-    N = len(address) * 2 
+    N = len(address_data) * 2 
     differences_sum = 0
     for wallet, differences in removed_user_based_differences.items():
         for item, diff in differences.items():
