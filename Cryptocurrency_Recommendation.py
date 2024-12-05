@@ -98,12 +98,12 @@ if __name__ == "__main__":
     # Collaborative Filtering 기반 추천 (User-Based)
     print("\n[INFO] Calculating User-Based Collaborative Filtering Recommendations...")
     file_path = './data/preprocessed_data.csv'
-    pivot_data, address_mean_investment_ratio_shift = preprocess_data(file_path, portfolio_df)
+    pivot_data, pivot_removed_mean_data,address_mean_investment_ratio_shift = preprocess_data(file_path, portfolio_df)
     
-    row_similarity_df = calculate_row_similarity(pivot_data)
-    global_mean, row_bias, col_bias = calculate_baseline_predictor(pivot_data)
+    row_similarity_df = calculate_row_similarity(pivot_removed_mean_data)
+    global_mean, row_bias, col_bias = calculate_baseline_predictor(pivot_removed_mean_data)
     
-    user_predicted_values = CF_baseline_predictor_userbased(user_address, pivot_data, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5)
+    user_predicted_values = CF_baseline_predictor_userbased(user_address, pivot_removed_mean_data, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5)
     user_sorted_predicted_values = dict(sorted(user_predicted_values.items(), key=lambda x: x[1], reverse=True))
     user_top_5_predictions = dict(list(user_sorted_predicted_values.items())[:5])
     user_top_50_predictions = dict(list(user_sorted_predicted_values.items())[:50])

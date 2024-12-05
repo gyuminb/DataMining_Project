@@ -32,8 +32,6 @@ def preprocess_data(file_path, user_data):
     # 각 지갑 주소와 코인의 투자 가치 비율 계산 (전체 데이터 기준)
     data['InvestmentRatio'] = data['TotalAssetValue'] / data['TotalPortfolioValue']
 
-    
-
 
     # 각 지갑별 InvestmentRatio_shift 평균 계산
     address_mean_investment_ratio_shift = data.groupby('Address')['InvestmentRatio'].mean()
@@ -47,15 +45,19 @@ def preprocess_data(file_path, user_data):
 
     )
     pivot_data = pivot_data.fillna(0)
+
+    pivot_removed_mean_data = pivot_data.copy()
+    pivot_removed_mean_data = pivot_removed_mean_data.fillna(0)
     # 각 지갑의 평균값을 피봇 테이블에서 빼기
-    for address in pivot_data.index:
-        pivot_data.loc[address] = pivot_data.loc[address].apply(
+
+    for address in pivot_removed_mean_data.index:
+        pivot_removed_mean_data.loc[address] = pivot_removed_mean_data.loc[address].apply(
             lambda value: value - address_mean_investment_ratio_shift[address] if value != 0 else 0
         )
 
     #print(pivot_data)
 
-    return pivot_data, address_mean_investment_ratio_shift
+    return pivot_data,pivot_removed_mean_data ,address_mean_investment_ratio_shift
 
 
 # row 기반 코사인 유사도 계산
@@ -99,7 +101,7 @@ def CF_baseline_predictor_userbased(address, pivot_data,address_mean_investment_
             rating = pivot_data.loc[similar_user, item]
             bias = global_mean + row_bias[similar_user] + col_bias[item]
             result += (similarity_score / K_similar_users.sum()) * (rating - bias)
-        result += global_mean + row_bias[address] + col_bias[item] + address_mean_investment_ratio_shift[address] #shift 평
+        result += global_mean + row_bias[address] + col_bias[item] + address_mean_investment_ratio_shift[address] #shift 
         predicted_values[item] = result
     
     return predicted_values
@@ -119,7 +121,7 @@ def CF_baseline_predictor_itembased(address, pivot_data,address_mean_investment_
                 rating = pivot_data.loc[address, similar_item]
                 bias = global_mean + row_bias[similar_item] + col_bias[address]
                 result += (similarity_score / K_similar_items.sum()) * (rating - bias)
-        result += global_mean + row_bias[item] + col_bias[address] + address_mean_investment_ratio_shift[address]
+        result += global_mean + row_bias[item] + col_bias[address] #+ address_mean_investment_ratio_shift[address]
         predicted_values[item] = result
     
     return predicted_values
