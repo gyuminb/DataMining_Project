@@ -2,6 +2,8 @@
 
 This project develops a cryptocurrency recommendation system leveraging whale portfolio insights to provide actionable investment suggestions. By combining **Association Rule Mining (ARM)** and **Collaborative Filtering (CF)** techniques, the system generates personalized and trend-based recommendations. 
 
+**Note**: This system is specifically designed for cryptocurrencies on the **Ethereum network**, as the dataset was collected exclusively from Ethereum-based wallet addresses on **Etherscan**. Recommendations may not include coins outside the Ethereum ecosystem.
+
 ---
 
 ## **Project Overview**
@@ -92,3 +94,6 @@ DataMining_Project/
     - ARM Recommendations: Derived from frequent itemsets and association rules.
     - CF Recommendations: Predictions from User-Based and Item-Based CF.
     - Final Recommendations: Top-ranked coins based on scoring integration.
+
+## **Important Note**
+- The recommendation system is Ethereum-specific. It analyzes portfolios and generates recommendations based only on coins present in the Ethereum network, as the dataset originates from Ethereum-based wallet addresses on Etherscan.
