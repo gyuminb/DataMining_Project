@@ -99,14 +99,16 @@ def calculate_baseline_predictor(pivot_data):
     """
     Calculate global average, user bias, and item bias for Baseline Predictor.
     """
+    valid_mask = pivot_data != 0
+    
     # Global average (μ)
-    global_mean = pivot_data.values.mean()
+    global_mean = pivot_data[valid_mask].mean().mean()
 
     # row bias (b_u)
-    row_bias = pivot_data.mean(axis=1) - global_mean
+    row_bias = pivot_data.where(valid_mask).mean(axis=1) - global_mean
 
     # col bias (b_i)
-    col_bias = pivot_data.mean(axis=0) - global_mean
+    col_bias = pivot_data.where(valid_mask).mean(axis=0) - global_mean
 
     return global_mean, row_bias, col_bias
 
