@@ -2,6 +2,8 @@ import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from AssociationRule_Recommendation import get_wallet_portfolio, preprocess_user_portfolio_data
 import time
+from multiprocessing import Pool
+from multiprocessing import Manager,Process
 
 def preprocess_data(file_path, user_data):
     # 기존 데이터 로드
@@ -49,15 +51,19 @@ def preprocess_data(file_path, user_data):
 
     )
     pivot_data = pivot_data.fillna(0)
+    
+    pivot_removed_mean_data = pivot_data.copy()
+    pivot_removed_mean_data = pivot_removed_mean_data.fillna(0)
     # 각 지갑의 평균값을 피봇 테이블에서 빼기
-    for address in pivot_data.index:
-        pivot_data.loc[address] = pivot_data.loc[address].apply(
+
+    for address in pivot_removed_mean_data.index:
+        pivot_removed_mean_data.loc[address] = pivot_removed_mean_data.loc[address].apply(
             lambda value: value - address_mean_investment_ratio_shift[address] if value != 0 else 0
         )
 
     #print(pivot_data)
 
-    return pivot_data, address_mean_investment_ratio_shift
+    return pivot_data,pivot_removed_mean_data ,address_mean_investment_ratio_shift
 
 def create_pivot_data_from_portfolio(combined_real_portfolio_data):
     
@@ -151,7 +157,7 @@ def CF_baseline_predictor_itembased(address, pivot_data,address_mean_investment_
                 rating = pivot_data.loc[address, similar_item]
                 bias = global_mean + row_bias[similar_item] + col_bias[address]
                 result += (similarity_score / K_similar_items.sum()) * (rating - bias)
-        result += global_mean + row_bias[item] + col_bias[address] + address_mean_investment_ratio_shift[address]
+        result += global_mean + row_bias[item] + col_bias[address] #+ address_mean_investment_ratio_shift[address]
         predicted_values[item] = result
     
     return predicted_values
@@ -188,39 +194,6 @@ def remove_middle_and_min_items(portfolio_data, num_items_to_remove=2):
     return updated_portfolio_data, removed_items
 
 
-def store_removed_user_differences(removed_items_dict,real_data, pivot_data, row_similarity_df, global_mean, row_bias, col_bias,address_mean_investment_ratio_shift):
-    user_based_differences = {}
-    item_based_differences = {}
-
-    #User-based
-    for address, removed_items in removed_items_dict.items():
-        if address not in pivot_data.index:
-            continue
-
-        # 예측값 계산
-        predicted_values = CF_baseline_predictor_userbased(
-            address, pivot_data, address_mean_investment_ratio_shift,row_similarity_df, global_mean, row_bias, col_bias,top_k=5
-        )
-
-        # 차이 계산
-        differences = calculate_difference_for_removed_items(address, removed_items, real_data, predicted_values)
-        user_based_differences[address] = differences
-
-    return user_based_differences
-def store_removed_item_differences(removed_items_dict,real_data, pivot_data, row_similarity_df, global_mean, row_bias, col_bias,address_mean_investment_ratio_shift):
-    item_based_differences = {} ##테이블 뒤집혓을 때 지갑주소 찾아야
-    #Item-based
-    for address, removed_items in removed_items_dict.items():
-
-        ## 예측값 계산
-        predicted_values = CF_baseline_predictor_itembased(
-            address, pivot_data.T, address_mean_investment_ratio_shift,row_similarity_df, global_mean, row_bias, col_bias,top_k=5
-        )
-        # 차이 계산
-        differences = calculate_difference_for_removed_items(address, removed_items, real_data, predicted_values)
-        item_based_differences[address] = differences
-
-    return item_based_differences
 
 def calculate_difference_for_removed_items(address, removed_items, real_data, predicted_values):
     differences = {}
@@ -233,17 +206,115 @@ def calculate_difference_for_removed_items(address, removed_items, real_data, pr
         
     return differences
 
-# Main script
+# 각 지갑에 대한 User-based 차이 계산 함수
+def process_user_based(args):
+    address, removed_items, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift, real_data = args
+    if address not in pivot_data.index:
+        return address, {}
+
+    # 예측값 계산
+    predicted_values = CF_baseline_predictor_userbased(
+        address, pivot_data, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5
+    )
+
+    # 차이 계산
+    differences = calculate_difference_for_removed_items(address, removed_items, real_data, predicted_values)
+    return address, differences
+
+# 각 지갑에 대한 Item-based 차이 계산 함수
+def process_item_based(args):
+    address, removed_items, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift, real_data = args
+
+    # 예측값 계산
+    predicted_values = CF_baseline_predictor_itembased(
+        address, pivot_data.T, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5
+    )
+
+    # 차이 계산
+    differences = calculate_difference_for_removed_items(address, removed_items, real_data, predicted_values)
+    return address, differences
+
+# 병렬 처리 함수
+def store_removed_user_differences_parallel(removed_items_dict, real_data, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift):
+    args = [
+        (address, removed_items, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift, real_data)
+        for address, removed_items in removed_items_dict.items()
+    ]
+
+    with Pool() as pool:
+        results = pool.map(process_user_based, args)
+
+    return {address: differences for address, differences in results}
+
+def store_removed_item_differences_parallel(removed_items_dict, real_data, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift):
+    args = [
+        (address, removed_items, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift, real_data)
+        for address, removed_items in removed_items_dict.items()
+    ]
+
+    with Pool() as pool:
+        results = pool.map(process_item_based, args)
+
+    return {address: differences for address, differences in results}
+
+# Worker 함수 정의
+def user_based_worker(address, removed_items, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift, real_data, results):
+    predicted_values = CF_baseline_predictor_userbased(
+        address, pivot_data, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5
+    )
+    differences = calculate_difference_for_removed_items(address, removed_items, real_data, predicted_values)
+    results[address] = differences
+
+def item_based_worker(address, removed_items, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift, real_data, results):
+    predicted_values = CF_baseline_predictor_itembased(
+        address, pivot_data.T, address_mean_investment_ratio_shift, row_similarity_df, global_mean, row_bias, col_bias, top_k=5
+    )
+    differences = calculate_difference_for_removed_items(address, removed_items, real_data, predicted_values)
+    results[address] = differences
+
+# Process Pool Manager
+def process_differences_with_limited_cores(worker_function, removed_items_dict, real_data, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift, max_cores=4):
+    processes = []
+    manager = Manager()
+    results = manager.dict()  # 프로세스 간 데이터 공유를 위한 Manager 사용
+
+    for address, removed_items in removed_items_dict.items():
+        # Process 생성
+        p = Process(
+            target=worker_function,
+            args=(address, removed_items, pivot_data, row_similarity_df, global_mean, row_bias, col_bias, address_mean_investment_ratio_shift, real_data, results)
+        )
+        processes.append(p)
+
+        # 동시 실행 프로세스 수 제한
+        if len(processes) >= max_cores:
+            for proc in processes:
+                proc.start()
+            for proc in processes:
+                proc.join()
+            processes = []  # 완료된 프로세스 리스트 초기화
+
+    # 남은 프로세스 처리
+    for proc in processes:
+        proc.start()
+    for proc in processes:
+        proc.join()
+
+    return dict(results)
+
+
+# Main script 수정
 if __name__ == "__main__":
+    start_time = time.time()  # 전체 실행 시간 측정 시작
     file_path = './data/preprocessed_data.csv'
-    
+
     # Portfolio 데이터 처리 및 유틸리티 매트릭스 생성
     address_data = pd.read_csv('./data/collaborative_validation_address.csv')
-    
+
     portfolio_data_list = []
-    removed_items_dict = {} 
-    real_portfolio_data_list =[]
-    
+    removed_items_dict = {}
+    real_portfolio_data_list = []
+
     for idx, addr in enumerate(address_data["Address"], start=1):
         print(f"\nFetching portfolio for address: {addr} (Progress: {idx}/{len(address_data)})")
         user_portfolio_data = get_wallet_portfolio(addr)
@@ -252,56 +323,76 @@ if __name__ == "__main__":
             continue
         real_data = preprocess_user_portfolio_data(user_portfolio_data)
         updated_portfolio, removed_items = remove_middle_and_min_items(real_data, num_items_to_remove=2)
-        
+
         # Save the updated portfolio and removed items
         portfolio_data_list.append(updated_portfolio)
         real_portfolio_data_list.append(real_data)
         removed_items_dict[addr] = removed_items
         time.sleep(1)  # 서버로부터 블락을 피하기 위해 딜레이 추가
 
-    #print("\n\nremoved item list : ",removed_items_dict,"\n\n")
-
-    # 3. 포트폴리오 데이터 병합
+    # 포트폴리오 데이터 병합
     combined_portfolio_data = pd.concat(portfolio_data_list, ignore_index=True)
     combined_real_portfolio_data = pd.concat(real_portfolio_data_list, ignore_index=True)
-    
-    
-    real_data = create_pivot_data_from_portfolio(combined_real_portfolio_data)
-    pivot_data, address_mean_investment_ratio_shift = preprocess_data(file_path, combined_portfolio_data)
 
-    
-    row_similarity_df = calculate_row_similarity(pivot_data)
-    global_mean, row_bias, col_bias = calculate_baseline_predictor(pivot_data)
-    removed_user_based_differences = store_removed_user_differences(removed_items_dict,real_data, pivot_data, row_similarity_df, global_mean, row_bias, col_bias,address_mean_investment_ratio_shift)
-    
+    real_data = create_pivot_data_from_portfolio(combined_real_portfolio_data)
+    pivot_data, pivot_removed_mean_data,address_mean_investment_ratio_shift = preprocess_data(file_path, combined_portfolio_data)
+
+    # User-based 병렬 계산
+    row_similarity_df = calculate_row_similarity(pivot_removed_mean_data)
+    global_mean, row_bias, col_bias = calculate_baseline_predictor(pivot_removed_mean_data)
+    removed_user_based_differences = process_differences_with_limited_cores(
+        worker_function=user_based_worker,
+        removed_items_dict=removed_items_dict,
+        real_data=real_data,
+        pivot_data=pivot_removed_mean_data,
+        row_similarity_df=row_similarity_df,
+        global_mean=global_mean,
+        row_bias=row_bias,
+        col_bias=col_bias,
+        address_mean_investment_ratio_shift=address_mean_investment_ratio_shift,
+        max_cores=4  # 실행할 코어 개수 제한
+    )
+
+    # Item-based 병렬 계산
     row_similarity_df = calculate_row_similarity(pivot_data.T)
     global_mean, row_bias, col_bias = calculate_baseline_predictor(pivot_data.T)
-    removed_item_based_differences = store_removed_item_differences(removed_items_dict,real_data, pivot_data.T, row_similarity_df,global_mean, row_bias, col_bias,address_mean_investment_ratio_shift)
-     
-    print(removed_item_based_differences) #empty,,?
+    removed_item_based_differences = process_differences_with_limited_cores(
+        worker_function=item_based_worker,
+        removed_items_dict=removed_items_dict,
+        real_data=real_data,
+        pivot_data=pivot_data.T,
+        row_similarity_df=row_similarity_df,
+        global_mean=global_mean,
+        row_bias=row_bias,
+        col_bias=col_bias,
+        address_mean_investment_ratio_shift=address_mean_investment_ratio_shift,
+        max_cores=4  # 실행할 코어 개수 제한
+    )
+
+    # 결과 출력
+    print(removed_item_based_differences)
     for wallet, differences in removed_item_based_differences.items():
         print(f"\nDifferences for wallet: {wallet}")
         for item, diff in differences.items():
             print(f" - {item}: {diff:.20f}")
 
-
-    #RMSE
-    diff_sum = 0
+    # RMSE 계산
+    N = len(address_data) * 2 
+    differences_sum = 0
     for wallet, differences in removed_user_based_differences.items():
-        for item, diff in differences.items():    
-            diff_sum += diff**2
-    result = (diff_sum / len(address_data))**(1/2)
-    print("\nUser based Diff",result)
+        for item, diff in differences.items():
+            differences_sum += diff**2
+    result = (differences_sum / N)**(1/2)
+    print("\nUser-Based Collaborative Filtering RMSE", result)
 
-    diff_sum = 0
+    differences_sum = 0
     for wallet, differences in removed_item_based_differences.items():
-        for item, diff in differences.items():    
-            diff_sum += diff**2
-    result = (diff_sum / len(address_data))**(1/2)
-    print("\nItem based Diff",result)
+        for item, diff in differences.items():
+            differences_sum += diff**2
+    result = (differences_sum / N)**(1/2)
+    print("\nItem-Based Collaborative Filtering RMSE", result)
 
 
 
-
-
-   
+    end_time = time.time()  # 전체 실행 시간 측정 시작
+    print(f"Total execution time: {end_time - start_time:.2f} seconds")
